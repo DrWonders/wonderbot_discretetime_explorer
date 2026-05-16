@@ -247,27 +247,39 @@
 "use strict";
 
 // ============================================================
-// The "error curve" we visualise. We use a shape that has
-// interesting curvature so the difference between true integral
-// and discrete approximation is visible at coarse sample rates.
-// e(t) = 0.04 * (1 - exp(-3t)) - 0.02 * sin(4*pi*t) * exp(-1.5t)
-// Designed so it starts at 0, climbs to about 0.04, with a
-// damped wobble. Time domain: 0 to 1.5 seconds.
+// The error curve we visualise is the same physical shape as the
+// integral explorer: a damped second-order step response.
+// At t=0 the wheel is at rest and the setpoint jumps to 0.10 m/s,
+// so error(0) = setpoint. The wheel then catches up and the error
+// decays toward zero, with a small overshoot that briefly takes
+// the error slightly negative before settling.
+//
+//   measured(t) = setpoint * [1 - e^(-ζωn·t) * (cos(ωd·t) + (ζωn/ωd)·sin(ωd·t))]
+//   error(t)    = setpoint - measured(t)
+//                = setpoint * e^(-ζωn·t) * (cos(ωd·t) + (ζωn/ωd)·sin(ωd·t))
+//
+// with ωn = 4.5, ζ = 0.65, ωd = ωn * sqrt(1 - ζ²).
 // ============================================================
 const T_MAX = 1.5;
+const SETPOINT = 0.10;
+const WN = 4.5;
+const ZETA = 0.65;
+const WD = WN * Math.sqrt(1 - ZETA * ZETA);
+const A = ZETA * WN;        // decay rate of the envelope
+const B = A / WD;           // coefficient on the sine term inside the bracket
+
 function errorCurve(t) {
-  return 0.04 * (1 - Math.exp(-3 * t)) - 0.02 * Math.sin(4 * Math.PI * t) * Math.exp(-1.5 * t);
+  if (t <= 0) return SETPOINT;
+  return SETPOINT * Math.exp(-A * t) * (Math.cos(WD * t) + B * Math.sin(WD * t));
 }
 
-// Derivative of the error curve (analytic, used as ground truth for the slope)
+// Analytic derivative of the error curve.
+// d/dt of [e^(-At) * (cos(ωd t) + B*sin(ωd t))] works out to
+//   e^(-At) * (-ωn² / ωd) * sin(ωd t)
+// after the cos coefficients cancel. Multiply by SETPOINT.
 function errorCurveDerivative(t) {
-  // d/dt [0.04(1 - e^(-3t))] = 0.12 * e^(-3t)
-  // d/dt [-0.02 sin(4πt) e^(-1.5t)]
-  //   = -0.02 [ 4π cos(4πt) e^(-1.5t) - 1.5 sin(4πt) e^(-1.5t) ]
-  //   = -0.02 e^(-1.5t) [ 4π cos(4πt) - 1.5 sin(4πt) ]
-  const term1 = 0.12 * Math.exp(-3 * t);
-  const term2 = -0.02 * Math.exp(-1.5 * t) * (4 * Math.PI * Math.cos(4 * Math.PI * t) - 1.5 * Math.sin(4 * Math.PI * t));
-  return term1 + term2;
+  if (t <= 0) return 0;
+  return -SETPOINT * Math.exp(-A * t) * (WN * WN / WD) * Math.sin(WD * t);
 }
 
 // True integral computed via fine numerical integration (mid-point rule with very small step)
@@ -318,8 +330,8 @@ function renderIntegralCanvas(dt) {
   const plotW = w - PADDING_L - PADDING_R;
   const plotH = h - PADDING_T - PADDING_B;
 
-  const yMax = 0.05;
-  const yMin = -0.005;
+  const yMax = 0.12;
+  const yMin = -0.02;
 
   const xPx = (t) => PADDING_L + (t / T_MAX) * plotW;
   const yPx = (v) => PADDING_T + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
@@ -329,7 +341,7 @@ function renderIntegralCanvas(dt) {
   ctx.lineWidth = 1;
   ctx.font = '10px -apple-system, sans-serif';
   ctx.fillStyle = '#9ca3af';
-  for (let yv = 0; yv <= yMax; yv += 0.01) {
+  for (let yv = yMin; yv <= yMax; yv += 0.02) {
     const y = yPx(yv);
     ctx.beginPath();
     ctx.moveTo(PADDING_L, y);
@@ -435,8 +447,8 @@ function renderDerivativeCanvas(dt) {
   const plotW = w - PADDING_L - PADDING_R;
   const plotH = h - PADDING_T - PADDING_B;
 
-  const yMax = 0.05;
-  const yMin = -0.005;
+  const yMax = 0.12;
+  const yMin = -0.02;
 
   const xPx = (t) => PADDING_L + (t / T_MAX) * plotW;
   const yPx = (v) => PADDING_T + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
@@ -446,7 +458,7 @@ function renderDerivativeCanvas(dt) {
   ctx.lineWidth = 1;
   ctx.font = '10px -apple-system, sans-serif';
   ctx.fillStyle = '#9ca3af';
-  for (let yv = 0; yv <= yMax; yv += 0.01) {
+  for (let yv = yMin; yv <= yMax; yv += 0.02) {
     const y = yPx(yv);
     ctx.beginPath();
     ctx.moveTo(PADDING_L, y);
