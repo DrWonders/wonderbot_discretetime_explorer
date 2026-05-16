@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WonderBot Discrete-Time Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #1f2937;
+    line-height: 1.4;
+  }
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    min-height: 100vh;
+    max-width: 1500px;
+    margin: 0 auto;
+    background: white;
+  }
+  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  aside {
+    background: #1f2937;
+    color: #f3f4f6;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  header h1 { font-size: 22px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+  header .subtitle { font-size: 13px; color: #6b7280; }
+
+  .panel {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .panel h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+  }
+  .panel-explanation {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  canvas { width: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 4px; display: block; }
+  canvas.integral-canvas { height: 220px; }
+  canvas.derivative-canvas { height: 220px; }
+
+  .readout-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .readout {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  .readout .label {
+    color: #6b7280;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .readout .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    font-variant-numeric: tabular-nums;
+  }
+  .readout.highlight .value { color: #f97316; }
+  .readout.good .value { color: #14b8a6; }
+
+  aside h2 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #d1d5db;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #374151;
+  }
+  .control { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #d1d5db;
+  }
+  .control-label .value {
+    color: #f97316;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #374151;
+    border-radius: 3px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #f97316;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #f97316;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .preset-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+  .preset-row button {
+    padding: 6px 4px;
+    background: transparent;
+    color: #d1d5db;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .preset-row button:hover { background: #374151; }
+  .preset-row button.active { background: #374151; border-color: #f97316; color: #f97316; }
+
+  .info-block {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 12px;
+    color: #d1d5db;
+    line-height: 1.5;
+  }
+  .info-block .title {
+    color: #14b8a6;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .footer-note {
+    font-size: 11px;
+    color: #6b7280;
+    text-align: center;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid #374151;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <main>
+    <header>
+      <h1>Discrete-Time Explorer</h1>
+      <div class="subtitle">See how the Pico's PID, which only checks the wheel every few milliseconds, approximates the smooth mathematical version. Drag the sample period slider and watch what happens.</div>
+    </header>
+
+    <div class="panel">
+      <h3>Integral (area under the error curve)</h3>
+      <div class="panel-explanation">The integral is the total area under the error curve over time. The smooth purple shading is the true continuous integral. The orange rectangles are what the discrete-time PID actually computes — one rectangle per sample, height equal to the error at that sample, width equal to the sample period. The chunkier the rectangles, the worse the approximation.</div>
+      <canvas class="integral-canvas" id="integralCanvas"></canvas>
+      <div class="readout-row">
+        <div class="readout"><div class="label">True integral</div><div class="value" id="trueIntegral">—</div></div>
+        <div class="readout highlight"><div class="label">Discrete approximation</div><div class="value" id="discreteIntegral">—</div></div>
+        <div class="readout good"><div class="label">Error</div><div class="value" id="integralError">—</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Derivative (slope of the error curve)</h3>
+      <div class="panel-explanation">The derivative is the slope of the error curve at any moment. The thin grey line is the true tangent at the marker. The orange line is what the discrete-time PID actually computes — the slope between two consecutive samples. At high sample rates the two are almost the same. At low sample rates the orange line can disagree wildly with the true slope.</div>
+      <canvas class="derivative-canvas" id="derivativeCanvas"></canvas>
+      <div class="readout-row">
+        <div class="readout"><div class="label">True slope at marker</div><div class="value" id="trueSlope">—</div></div>
+        <div class="readout highlight"><div class="label">Discrete approximation</div><div class="value" id="discreteSlope">—</div></div>
+        <div class="readout good"><div class="label">Error</div><div class="value" id="slopeError">—</div></div>
+      </div>
+    </div>
+  </main>
+
+  <aside>
+    <div>
+      <h2>Controls</h2>
+      <div class="control">
+        <div class="control-label">
+          <span>Sample period (Δt)</span>
+          <span class="value" id="dtVal">10 ms</span>
+        </div>
+        <input type="range" id="dt" min="1" max="200" step="1" value="10">
+      </div>
+      <div class="control">
+        <div class="control-label">
+          <span>Sample rate</span>
+          <span class="value" id="rateVal">100 Hz</span>
+        </div>
+      </div>
+      <div class="preset-row">
+        <button data-preset="1">1 ms</button>
+        <button data-preset="10" class="active">10 ms</button>
+        <button data-preset="50">50 ms</button>
+        <button data-preset="100">100 ms</button>
+        <button data-preset="200">200 ms</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>What to try</h2>
+      <div class="info-block">
+        <div class="title">Start here</div>
+        Move the slider all the way to the right (200 ms = 5 Hz). The orange rectangles miss huge chunks of the curve. Now move it back to 1 ms (1000 Hz). The rectangles match the curve almost perfectly. The WonderBot's PID runs at 10 ms (100 Hz). Find that value and see whether the approximation is good enough.
+      </div>
+    </div>
+
+    <div>
+      <h2>Why this matters</h2>
+      <div class="info-block">
+        Faster sampling = better approximation, but more CPU time spent. Slower sampling = saves CPU, but the integral and derivative the PID sees no longer match what the maths textbook expects. Engineers pick a sample rate that is fast enough for the dynamics of the system but no faster.
+      </div>
+    </div>
+
+    <div class="footer-note">WonderBot Differential Drive Robotics Course</div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================
+// The "error curve" we visualise. We use a shape that has
+// interesting curvature so the difference between true integral
+// and discrete approximation is visible at coarse sample rates.
+// e(t) = 0.04 * (1 - exp(-3t)) - 0.02 * sin(4*pi*t) * exp(-1.5t)
+// Designed so it starts at 0, climbs to about 0.04, with a
+// damped wobble. Time domain: 0 to 1.5 seconds.
+// ============================================================
+const T_MAX = 1.5;
+function errorCurve(t) {
+  return 0.04 * (1 - Math.exp(-3 * t)) - 0.02 * Math.sin(4 * Math.PI * t) * Math.exp(-1.5 * t);
+}
+
+// Derivative of the error curve (analytic, used as ground truth for the slope)
+function errorCurveDerivative(t) {
+  // d/dt [0.04(1 - e^(-3t))] = 0.12 * e^(-3t)
+  // d/dt [-0.02 sin(4πt) e^(-1.5t)]
+  //   = -0.02 [ 4π cos(4πt) e^(-1.5t) - 1.5 sin(4πt) e^(-1.5t) ]
+  //   = -0.02 e^(-1.5t) [ 4π cos(4πt) - 1.5 sin(4πt) ]
+  const term1 = 0.12 * Math.exp(-3 * t);
+  const term2 = -0.02 * Math.exp(-1.5 * t) * (4 * Math.PI * Math.cos(4 * Math.PI * t) - 1.5 * Math.sin(4 * Math.PI * t));
+  return term1 + term2;
+}
+
+// True integral computed via fine numerical integration (mid-point rule with very small step)
+function trueIntegral(tMax) {
+  const N = 10000;
+  const dt = tMax / N;
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const t = (i + 0.5) * dt;
+    sum += errorCurve(t) * dt;
+  }
+  return sum;
+}
+
+// Discrete integral computed at given sample period
+function discreteIntegral(tMax, sampleDt) {
+  let sum = 0;
+  let t = 0;
+  while (t < tMax) {
+    sum += errorCurve(t) * sampleDt;
+    t += sampleDt;
+  }
+  return sum;
+}
+
+// ============================================================
+// Canvas helpers
+// ============================================================
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+// ============================================================
+// Render integral canvas
+// ============================================================
+function renderIntegralCanvas(dt) {
+  const canvas = document.getElementById('integralCanvas');
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  const PADDING_L = 56, PADDING_R = 12, PADDING_T = 14, PADDING_B = 28;
+  const plotW = w - PADDING_L - PADDING_R;
+  const plotH = h - PADDING_T - PADDING_B;
+
+  const yMax = 0.05;
+  const yMin = -0.005;
+
+  const xPx = (t) => PADDING_L + (t / T_MAX) * plotW;
+  const yPx = (v) => PADDING_T + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  for (let yv = 0; yv <= yMax; yv += 0.01) {
+    const y = yPx(yv);
+    ctx.beginPath();
+    ctx.moveTo(PADDING_L, y);
+    ctx.lineTo(w - PADDING_R, y);
+    ctx.stroke();
+    ctx.fillText(yv.toFixed(2), 20, y + 3);
+  }
+  for (let xv = 0; xv <= T_MAX; xv += 0.25) {
+    const x = xPx(xv);
+    ctx.beginPath();
+    ctx.moveTo(x, PADDING_T);
+    ctx.lineTo(x, PADDING_T + plotH);
+    ctx.stroke();
+    ctx.fillText(xv.toFixed(2) + 's', x - 12, h - 8);
+  }
+
+  // Zero line
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.beginPath();
+  ctx.moveTo(PADDING_L, yPx(0));
+  ctx.lineTo(w - PADDING_R, yPx(0));
+  ctx.stroke();
+
+  // y-axis label
+  ctx.save();
+  ctx.translate(14, PADDING_T + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('error (m/s)', 0, 0);
+  ctx.restore();
+
+  // ----- Draw the discrete rectangles -----
+  ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 1;
+  let t = 0;
+  while (t < T_MAX) {
+    const eVal = errorCurve(t);
+    const xLeft = xPx(t);
+    const xRight = xPx(Math.min(t + dt, T_MAX));
+    const yTop = yPx(eVal);
+    const yBase = yPx(0);
+    const rectH = yBase - yTop;
+    ctx.fillRect(xLeft, Math.min(yTop, yBase), xRight - xLeft, Math.abs(rectH));
+    ctx.strokeRect(xLeft, Math.min(yTop, yBase), xRight - xLeft, Math.abs(rectH));
+    t += dt;
+  }
+
+  // ----- Draw the continuous shaded area (under the curve) -----
+  // Use a dotted purple fill underneath
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.18)';
+  ctx.beginPath();
+  ctx.moveTo(xPx(0), yPx(0));
+  for (let i = 0; i <= 200; i++) {
+    const tt = (i / 200) * T_MAX;
+    ctx.lineTo(xPx(tt), yPx(errorCurve(tt)));
+  }
+  ctx.lineTo(xPx(T_MAX), yPx(0));
+  ctx.closePath();
+  ctx.fill();
+
+  // ----- Draw the smooth curve on top -----
+  ctx.strokeStyle = '#8b5cf6';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 400; i++) {
+    const tt = (i / 400) * T_MAX;
+    const x = xPx(tt);
+    const y = yPx(errorCurve(tt));
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Sample dots
+  ctx.fillStyle = '#f97316';
+  let t2 = 0;
+  while (t2 < T_MAX) {
+    ctx.beginPath();
+    ctx.arc(xPx(t2), yPx(errorCurve(t2)), 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    t2 += dt;
+  }
+
+  // Legend
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.fillStyle = '#8b5cf6';
+  ctx.fillText('— smooth curve (truth)', w - 180, PADDING_T + 12);
+  ctx.fillStyle = '#f97316';
+  ctx.fillText('— sampled rectangles', w - 180, PADDING_T + 26);
+}
+
+// ============================================================
+// Render derivative canvas
+// ============================================================
+function renderDerivativeCanvas(dt) {
+  const canvas = document.getElementById('derivativeCanvas');
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  const PADDING_L = 56, PADDING_R = 12, PADDING_T = 14, PADDING_B = 28;
+  const plotW = w - PADDING_L - PADDING_R;
+  const plotH = h - PADDING_T - PADDING_B;
+
+  const yMax = 0.05;
+  const yMin = -0.005;
+
+  const xPx = (t) => PADDING_L + (t / T_MAX) * plotW;
+  const yPx = (v) => PADDING_T + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  for (let yv = 0; yv <= yMax; yv += 0.01) {
+    const y = yPx(yv);
+    ctx.beginPath();
+    ctx.moveTo(PADDING_L, y);
+    ctx.lineTo(w - PADDING_R, y);
+    ctx.stroke();
+    ctx.fillText(yv.toFixed(2), 20, y + 3);
+  }
+  for (let xv = 0; xv <= T_MAX; xv += 0.25) {
+    const x = xPx(xv);
+    ctx.beginPath();
+    ctx.moveTo(x, PADDING_T);
+    ctx.lineTo(x, PADDING_T + plotH);
+    ctx.stroke();
+    ctx.fillText(xv.toFixed(2) + 's', x - 12, h - 8);
+  }
+
+  // Zero line
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.beginPath();
+  ctx.moveTo(PADDING_L, yPx(0));
+  ctx.lineTo(w - PADDING_R, yPx(0));
+  ctx.stroke();
+
+  // y-axis label
+  ctx.save();
+  ctx.translate(14, PADDING_T + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('error (m/s)', 0, 0);
+  ctx.restore();
+
+  // Smooth curve
+  ctx.strokeStyle = '#8b5cf6';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 400; i++) {
+    const tt = (i / 400) * T_MAX;
+    const x = xPx(tt);
+    const y = yPx(errorCurve(tt));
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // ----- Pick a marker location (where we show both true tangent and discrete slope) -----
+  // Place the marker at a curvy interesting bit: t = 0.55s
+  const markerT = 0.55;
+  const markerE = errorCurve(markerT);
+  const markerSlope = errorCurveDerivative(markerT);
+
+  // Discrete approximation: slope between sample at markerT and sample at (markerT - dt)
+  // (so the "this minus last" view consistent with the firmware)
+  const prevT = Math.max(0, markerT - dt);
+  const prevE = errorCurve(prevT);
+  const discSlope = (markerE - prevE) / (markerT - prevT);
+
+  // True tangent line drawn around the marker
+  const tangentSpread = 0.18;
+  const tLeft = markerT - tangentSpread;
+  const tRight = markerT + tangentSpread;
+  const trueLeftY = markerE - markerSlope * tangentSpread;
+  const trueRightY = markerE + markerSlope * tangentSpread;
+  ctx.strokeStyle = '#9ca3af';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(xPx(tLeft), yPx(trueLeftY));
+  ctx.lineTo(xPx(tRight), yPx(trueRightY));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Discrete approximation line: drawn through (prevT, prevE) and (markerT, markerE), extended a bit
+  const extendL = (markerT - prevT);
+  const extendR = (markerT - prevT);
+  const discX0 = prevT - extendL;
+  const discY0 = prevE - discSlope * extendL;
+  const discX1 = markerT + extendR;
+  const discY1 = markerE + discSlope * extendR;
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(xPx(discX0), yPx(discY0));
+  ctx.lineTo(xPx(discX1), yPx(discY1));
+  ctx.stroke();
+
+  // The two sample dots
+  ctx.fillStyle = '#f97316';
+  ctx.beginPath();
+  ctx.arc(xPx(prevT), yPx(prevE), 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(xPx(markerT), yPx(markerE), 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Marker dot (the "now" point)
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(xPx(markerT), yPx(markerE), 6, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Legend
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.fillStyle = '#8b5cf6';
+  ctx.fillText('— error curve', w - 180, PADDING_T + 12);
+  ctx.fillStyle = '#9ca3af';
+  ctx.fillText('-- true tangent', w - 180, PADDING_T + 26);
+  ctx.fillStyle = '#f97316';
+  ctx.fillText('— slope between samples', w - 180, PADDING_T + 40);
+
+  return { trueSlope: markerSlope, discSlope };
+}
+
+// ============================================================
+// Update everything
+// ============================================================
+function update() {
+  const dtMs = parseInt(document.getElementById('dt').value, 10);
+  const dt = dtMs / 1000;
+  document.getElementById('dtVal').textContent = dtMs + ' ms';
+  document.getElementById('rateVal').textContent = (1000 / dtMs).toFixed(0) + ' Hz';
+
+  // Update preset highlights
+  document.querySelectorAll('button[data-preset]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.preset, 10) === dtMs);
+  });
+
+  // Integral readouts
+  const trueInt = trueIntegral(T_MAX);
+  const discInt = discreteIntegral(T_MAX, dt);
+  const intErrPct = Math.abs(discInt - trueInt) / trueInt * 100;
+  document.getElementById('trueIntegral').textContent = trueInt.toFixed(5);
+  document.getElementById('discreteIntegral').textContent = discInt.toFixed(5);
+  document.getElementById('integralError').textContent = intErrPct.toFixed(1) + '%';
+
+  // Render
+  renderIntegralCanvas(dt);
+  const slopeData = renderDerivativeCanvas(dt);
+
+  // Derivative readouts
+  document.getElementById('trueSlope').textContent = slopeData.trueSlope.toFixed(3);
+  document.getElementById('discreteSlope').textContent = slopeData.discSlope.toFixed(3);
+  const slopeErrPct = Math.abs(slopeData.discSlope - slopeData.trueSlope) / Math.abs(slopeData.trueSlope) * 100;
+  document.getElementById('slopeError').textContent = isFinite(slopeErrPct) ? slopeErrPct.toFixed(1) + '%' : '—';
+}
+
+document.getElementById('dt').addEventListener('input', update);
+document.querySelectorAll('button[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('dt').value = btn.dataset.preset;
+    update();
+  });
+});
+
+window.addEventListener('resize', update);
+update();
+</script>
+</body>
+</html>
